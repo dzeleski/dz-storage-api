@@ -26,22 +26,29 @@ def get_datetime():
 @app.route('/v1.0/upload_file', methods=['POST'])
 def upload_file():
 
-    if 'file' in request.files and 'name' in request.form:
+    if 'file' in request.files and 'name' in request.form and 'cust_id' in request.form:
+        # Get required data
         file = request.files['file']
-
         name = request.form['name']
+        cust_id = int(request.form['cust_id'])
+        # Set current time
         time_now = get_datetime()
+        # Get hash of file
         md5 = hashlib.md5(file.read()).hexdigest()
+        # Get file size
         file.seek(0, os.SEEK_END)
         size = file.tell()
+        # Set key name
         key_name = md5[:4] + "/" + time_now + "/" + name
 
         try:
+            # Seek to front of file for upload
             file.seek(0)
+            # Upload file to S3, write data to Dynamo for metadata
             s3.upload_fileobj(file, s3_bucket, key_name)
             table.put_item(
                 Item={
-                    'cust_id': 1,
+                    'cust_id': cust_id,
                     'date_time': time_now,
                     'file_size': size,
                     'key': key_name,
