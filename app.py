@@ -1,9 +1,10 @@
-from flask import Flask, request, Response
+from flask import Flask, request, Response, send_file
 import boto3
 import datetime
 import hashlib
 import platform
 import os
+import io
 
 app = Flask(__name__)
 
@@ -69,22 +70,62 @@ def upload_file():
 
 @app.route('/v1.0/download_file', methods=['POST'])
 def download_file():
-    data = request.data['file']
+    json_data = request.get_json()
 
-    if data:
-        pass
+    if 'file' in json_data:
+        # Get required data
+        key = json_data['file']
+        # Create file IO object
+        file = io.BytesIO()
+
+        try:
+            # Download requested file
+            s3.download_fileobj(s3_bucket, key, file)
+        except Exception as e:
+            return e
+
+        # Seek to beginning of file to send
+        file.seek(0)
+
+        return send_file(file, mimetype='application/octet-stream')
     else:
-        pass
+        return Response('{"BadData": true}', status=400,
+                        mimetype='application/json')
 
 
 @app.route('/v1.0/delete_file', methods=['DELETE'])
 def delete_file():
-    data = request.data['file']
+    json_data = request.get_json()
 
-    if data:
-        pass
+    s3_resource = boto3.resource('s3')
+
+    if 'file' in json_data and 'cust_id' in json_data:
+        # Get required data
+        key = json_data['file']
+        cust_id = json_data['cust_id']
+
+        # s3_obj = s3_resource.Object(s3_bucket, key)
+        # s3_obj.delete()
+        key_split = key.split('/')
+
+        table.delete_item(
+            Key={
+                'date_time': {
+                    'S': key_split[1],
+                },
+                'file_name': {
+                    'S': key_split[2],
+                },
+                'cust_id': {
+                    'N': cust_id
+                }
+            }
+        )
+        return Response('{"Deleted": true}', status=202,
+                        mimetype='application/json')
     else:
-        pass
+        return Response('{"BadData": true}', status=400,
+                        mimetype='application/json')
 
 
 @app.route('/v1.0/get_metadata', methods=['POST'])
