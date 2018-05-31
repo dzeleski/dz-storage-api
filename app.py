@@ -1,5 +1,6 @@
-from flask import Flask, request, Response, send_file
+from flask import Flask, request, Response, send_file, jsonify
 import boto3
+from boto3.dynamodb.conditions import Key
 import datetime
 import hashlib
 import platform
@@ -103,24 +104,23 @@ def delete_file():
         # Get required data
         key = json_data['file']
         cust_id = json_data['cust_id']
-
-        # s3_obj = s3_resource.Object(s3_bucket, key)
-        # s3_obj.delete()
         key_split = key.split('/')
 
-        table.delete_item(
-            Key={
-                'date_time': {
-                    'S': key_split[1],
-                },
-                'file_name': {
-                    'S': key_split[2],
-                },
-                'cust_id': {
-                    'N': cust_id
+        try:
+            # Delete s3 file
+            s3_obj = s3_resource.Object(s3_bucket, key)
+            s3_obj.delete()
+
+            # Delete metadata
+            table.delete_item(
+                Key={
+                    'date_time': key_split[1],
+                    'cust_id': cust_id
                 }
-            }
-        )
+            )
+        except Exception as e:
+            return e
+
         return Response('{"Deleted": true}', status=202,
                         mimetype='application/json')
     else:
@@ -128,14 +128,19 @@ def delete_file():
                         mimetype='application/json')
 
 
-@app.route('/v1.0/get_metadata', methods=['POST'])
-def get_metadata():
-    data = request.data['query']
+@app.route('/v1.0/query_metadata', methods=['POST'])
+def query_metadata():
+    json_data = request.get_json()
 
-    if data:
-        pass
+    if 'filter_key' and 'filter_value' in json_data:
+            search_exp = Key(json_data['search_key']).eq(json_data['search_value'])
+            filter_exp = Key(json_data['filter_key']).eq(json_data['filter_value'])
+            response = table.query(KeyConditionExpression=search_exp,
+                                   FilterExpression=filter_exp)
+            return str(response['Items'])
     else:
-        pass
+        return Response('{"BadData": true}', status=400,
+                        mimetype='application/json')
 
 
 @app.route('/v1.0/health', methods=['GET'])
